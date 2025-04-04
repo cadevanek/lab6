@@ -1,9 +1,10 @@
 project:
+  title: "lab 6"
+  output-dir: docs
   type: website
-  output-dir: _site
 
 website:
-  title: "My Quarto Website"
+  title: "lab6"
   navbar:
     left:
       - href: index.qmd
