@@ -11,6 +11,7 @@ library(powerjoin)
 library(glue)
 library(vip)
 library(baguette)
+library(patchwork)
 ```
 
 ```{r}
@@ -20,7 +21,6 @@ root <- 'https://gdex.ucar.edu/dataset/camels/file'
 download.file('https://gdex.ucar.edu/dataset/camels/file/camels_attributes_v2.0.pdf',
               'data/camels_attributes_v2.0.pdf')
 
-# Getting Basin characteristics
 types <- c("clim", "geol", "soil", "topo", "vege", "hydro")
 
 remote_files <- glue('{root}/camels_{types}.txt')
@@ -32,6 +32,9 @@ camels <- map(local_files, read_delim, show_col_types = FALSE) %>%
   power_full_join(by = 'gauge_id')
 ```
 
+Q1:
+zero_q_freq represents how often the streams' flow is recorded at zero.
+
 ```{r}
 library(ggthemes)
 ggplot(data = camels, aes(x = gauge_lon, y = gauge_lat)) +
@@ -40,6 +43,32 @@ ggplot(data = camels, aes(x = gauge_lon, y = gauge_lat)) +
   scale_color_gradient(low = "pink", high = "dodgerblue") +
   ggthemes::theme_map()
 ```
+
+Q2:
+```{r}
+
+
+# Map 1: Aridity
+map_aridity <- ggplot(camels, aes(x = gauge_lon, y = gauge_lat)) +
+  borders("state", colour = "gray50") +
+  geom_point(aes(color = aridity), size = 2) +
+  scale_color_viridis_c(option = "C", name = "Aridity") +
+  ggthemes::theme_map() +
+  labs(title = "Sites Colored by Aridity")
+
+# Map 2: Mean Precipitation (p_mean)
+map_pmean <- ggplot(camels, aes(x = gauge_lon, y = gauge_lat)) +
+  borders("state", colour = "gray50") +
+  geom_point(aes(color = p_mean), size = 2) +
+  scale_color_viridis_c(option = "D", name = "Mean Precipitation (mm)") +
+  ggthemes::theme_map() +
+  labs(title = "Sites Colored by Mean Precipitation")
+
+# Combine with patchwork
+map_aridity + map_pmean
+
+```
+
 
 ```{r}
 # Create a scatter plot of aridity vs rainfall
@@ -189,12 +218,12 @@ summary(extract_fit_engine(lm_wf))$coefficients
 ```
 
 ```{r}
-# From the base implementation
+
 summary(lm_base)$coefficients
 ```
 
 ```{r}
-#
+
 lm_data <- augment(lm_wf, new_data = camels_test)
 dim(lm_data)
 ```
@@ -218,11 +247,11 @@ rf_model <- rand_forest() %>%
   set_mode("regression")
 
 rf_wf <- workflow() %>%
-  # Add the recipe
+
   add_recipe(rec) %>%
-  # Add the model
+ 
   add_model(rf_model) %>%
-  # Fit the model
+ 
   fit(data = camels_train) 
 ```
 
@@ -238,13 +267,12 @@ autoplot(wf)
 rank_results(wf, rank_metric = "rsq", select_best = TRUE)
 
 ```
+Q3:
 
 ```{r}
-# Load required packages
 library(xgboost)
 library(baguette)
 
-# Define an XGBoost regression model
 xgb_model <- boost_tree(
   trees = 500,
   learn_rate = 0.05
@@ -252,12 +280,10 @@ xgb_model <- boost_tree(
   set_engine("xgboost") %>%
   set_mode("regression")
 
-# Define a neural network model using bagged MLPs
 nn_model <- bag_mlp() %>%
   set_engine("nnet") %>%
   set_mode("regression")
 
-# Add models to the existing workflow set
 all_models <- workflow_set(
   preproc = list(rec),
   models = list(
@@ -268,7 +294,6 @@ all_models <- workflow_set(
   )
 )
 
-# Refit all models with cross-validation
 all_model_res <- workflow_map(
   all_models,
   fn = "fit_resamples",
@@ -280,18 +305,15 @@ all_model_res <- workflow_map(
   )
 )
 
-# Plot performance
 autoplot(all_model_res)
 
-# Rank models by RSQ (higher is better)
 rank_results(all_model_res, rank_metric = "rsq", select_best = TRUE)
 
-# Rank models by RMSE (lower is better)
 rank_results(all_model_res, rank_metric = "rmse", select_best = TRUE)
 
 ```
 
-According to the results, it seems like the random forest model is the most effective.
+According to the results, it seems like the random forest model is the most effective, and the one I would move forward with.
 
 ```{r}
 
@@ -340,7 +362,10 @@ nn_model <- bag_mlp() %>%
 
 ```
 
-setting workflows
+Setting workflows
+
+
+Evaluation:
 
 ```{r}
 # Create a named list of models
@@ -377,16 +402,15 @@ According to these results, bag_mlp is likely the best model in this scenario.
 ```{r}
 
 
-# Build final workflow
 final_wf <- workflow() %>%
   add_model(rf_model) %>%
   add_recipe(rec)
 
-# Fit the model to the full training data
+
 final_fit <- final_wf %>%
   fit(data = camels_train)
 
-# Make predictions on the test set
+
 final_results <- augment(final_fit, new_data = camels_test)
 
 
